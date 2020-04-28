@@ -1,0 +1,1015 @@
+/* This file downloaded from Highend3d.com
+''  
+''  Highend3d.com File Information:
+''  
+''    Script Name: Anim Snap
+''    Author: jcroke 
+''    Last Updated: Apr 16, 2008
+''    Update/Change this file at:
+''    http://Highend3d.com/maya/downloads/mel_scripts/animation/2081.html
+''  
+''  Please do not alter any information above this line
+''  it is generated dynamically by Highend3d.com and will
+''  be changed automatically on any updates.
+*/
+/// ANIM SNAP 
+/// Written by Jeff Croke, copyright 2008.
+
+global string $jbcSlaves[];  // holding array for all following procedures 
+$jbcSlaves = `ls -sl`;
+
+global proc animSnap()
+{
+string $master;
+string $slave;string $slaveText;
+string $slaveList[]; clear $slaveList;
+int $slaves=0;
+int $frameStart = `playbackOptions -q -min`;
+int $frameEnd  = `playbackOptions -q -max`;
+int $increment = 1;
+string $sel[] = `ls-sl`;
+int $numObj; string $multObj;
+int $quickSnap = 0; // lets anim snap know that command comes from quickSnap button
+global string $jbcSlaves[];
+
+if (`size $sel` ==2)
+	{
+	$master = $sel[0];
+	$slave = $sel[1];
+	$slaveText = $sel[1];
+	clear $jbcSlaves;
+	$jbcSlaves[0]=$sel[1];
+	}
+	
+else if (`size $sel` >= 3)
+	{
+	$master = $sel[0];
+	$slave = $sel[1];
+	$slaves=(`size $sel` - 1);
+	clear $jbcSlaves;
+	$jbcSlaves=$sel;
+	removeMaster();
+	$numObj =(`size $sel` - 1);
+	$multObj = ("> "+ $numObj+ " Objects selected <");
+	$slaveText =$multObj;
+	}	
+	
+	string $ASWindow = "AnimSnap";
+	string $ASCheck[] = `ls -tr "AnimSnap*"`;
+
+	if (`window -exists $ASWindow` )
+		deleteUI $ASWindow;
+
+	window -tlb on -width 220 -height 268  -title "Anim Snap" -resizeToFitChildren true -mb 1 $ASWindow;
+	//Window size check.
+  		if (`windowPref -q -ex AnimSnap`)
+		{
+        	if ((`windowPref -q -w AnimSnap`) != 220)
+                {windowPref -e -w 220 AnimSnap;}
+
+        	if ((`windowPref -q -h AnimSnap`) != 268)
+                {windowPref -e -h 268 AnimSnap;}
+		}
+	menu -label "Help" 
+	      -helpMenu true 
+	      -allowOptionBoxes false ;    
+ 	menuItem 	-label "About..." 
+			-c "jbc_aboutAnimSnap()";
+	menuItem 	-label "What am I ?" 
+			-c "jbc_whatIsIt()";				
+	menuItem	-label "How to Use"
+			-c "jbc_useAnimSnap()";
+					
+	columnLayout -h 10 -adjustableColumn true ASt_Base;
+		separator -st none -h 12;
+		rowLayout  -nc 1;
+			iconTextButton
+				-style textOnly
+				-width 220  -height 25
+				-l "Frame Range for Snapping" 
+				-command ("int $FS = `playbackOptions -q -min`; int $FE = `playbackOptions -q -max`; floatField  -e -v $FS startFr; floatField -e -v  $FE endFr;textField -e -tx (\"Reset frame range\") info;jbc_keySlave();jbc_keySlave2();")
+				-annotation "Reset Range to Shot Default"
+				resetFrames;
+		setParent ..;
+
+		separator -st none -h 8;
+		//frameLayout -lv 0;
+		rowLayout  -nc 6 -cw6 35 50 25 25 50 35;
+			iconTextButton
+				-style textOnly
+				-l "   <<"
+				-width 35  -height 025
+				-command ("int $val = `floatField -q -v startFr`; $val=($val-1);floatField -e -v $val startFr;jbc_keySlave();textField -e -tx (\"Start set to \" + $val) info;")
+				startLess;
+				
+			floatField   -w 50 -h 25 -v $frameStart  -pre 0  -s 1 startFr;
+
+			iconTextButton
+				- style textOnly
+				-l ">>   "
+				-width 25  -height 25
+				-command ("int $val = `floatField -q -v startFr`; $val=($val+1);floatField -e -v $val startFr;jbc_keySlave();textField -e -tx (\"Start set to \" + $val) info;")
+				startMore;
+
+			iconTextButton
+				- style textOnly
+				-l "   <<"
+				-width 25  -height 025
+				-command ("int $val = `floatField -q -v endFr`; $val=($val-1);floatField -e -v $val endFr;jbc_keySlave2();textField -e -tx (\"End set to \" + $val) info;")
+				//-annotation "End Frame for AnimSnap"
+				endLess;
+			floatField   -w 50 -h 25 -v $frameEnd  -pre 0 -s 1 endFr;
+			iconTextButton
+				- style textOnly
+				-l ">>   "
+				-width 35  -height 25
+				-command ("int $val = `floatField -q -v endFr`; $val=($val+1);floatField -e -v $val endFr;jbc_keySlave2();textField -e -tx (\"End set to \" + $val) info;")
+				endMore;			
+		setParent ..;
+
+//"Start" & "End" Buttons
+		rowLayout  -nc 4 -cw4 35 50 50 50;
+			text  -l "   " -w 25 -h 20;
+			iconTextButton
+				- style textOnly
+				-w 50 -h 20
+				-command ("int $FS = `currentTime -q`; floatField  -e -v $FS startFr; jbc_keySlave(); textField -e -tx (\"Start set to \" + $FS) info;")
+				-l "  start  "
+				-ann "Click to set START to current frame"
+				startButton;
+			text  -l "   " -w 50 -h 20;
+			iconTextButton
+				- style textOnly
+				-w 50 -h 20
+				-command ("int $FE = `currentTime -q`; floatField  -e -v $FE endFr;textField -e -tx (\"End set to \" + $FE) info;")
+				-l "  end  "
+				-ann "Click to set END to current frame"
+				endButton;
+		setParent ..;
+
+		rowLayout  -nc 2 -cw2 105 115;
+			checkBox 
+				-l "Fast Snap"
+				-w 105 -h 25
+				-ann "Faster snapping, but when 'on', it brings up the Dope Sheet during the snap process"
+				-v 1
+				-onc ("textField -e -tx \"Faster Snapping ON\" info")
+				-ofc ("textField -e -tx \"Faster Snapping OFF\" info")
+				fastSnap;
+				
+			checkBox 
+				-l "Maintain Offset" 
+				-w 115 -h 25 
+				-onc ("textField -e -tx \"Maintain Offset ON\" info")
+				-ofc ("textField -e -tx \"Maintain Offset OFF\" info")
+				MO;
+		setParent ..;
+		
+// set snap increment
+		rowLayout  -nc 5 -cw5 80 20 45 20 50;
+			iconTextButton
+				-style textOnly
+				-l "By Increment"
+				-width 80  -height 25
+				-command ("ToggleInc()")
+				incReset;
+
+			iconTextButton
+				-style textOnly
+				-l " <<"
+				-width 20  -height 025
+				-command  ("int $val = `floatField -q -v inc`; $val=($val-1);if ($val<=0){$val=1;};floatField -e -v $val inc;textField -e -tx (\"Set Increment to \" + $val) info;")
+				incLess;
+				
+			floatField   -w 45 -h 25 -v $increment  -pre 0  -s 1 inc;
+
+			iconTextButton
+				- style textOnly
+				-l ">>"
+				-width 20  -height 25
+				-command ("int $val = `floatField -q -v inc`; $val=($val+1);if ($val<1) $val=1; floatField -e -v $val inc;textField -e -tx (\"Set Increment to \" + $val) info;")
+				incMore;
+
+			iconTextButton
+				- style textOnly
+				-l " | Swap |"
+				-width 50  -height 25
+				-command ("swap()")
+				swapMS;
+
+
+		setParent ..;
+
+
+//Master Text Box
+		rowLayout  -nc 3 -cw3 10 155 50;
+			iconTextButton
+				- style textOnly
+				-l "<" -w 10 -h 25
+				-ann "Select This Object"
+				-command ("string $sel=`textField -q -tx master`; select $sel;")
+				selMasterButton;
+			textField   -w 155 -h 25 -tx $master
+				-ann "The object or control you want to snap to"
+				master;
+			iconTextButton   
+				- style textOnly 
+				-l "< Master" -w 50 -h 25 
+				-ann "Make the selected Object the Master"
+				-command "pickMaster()"
+				masterButton;
+		setParent ..;
+
+//Slave Text Box
+		rowLayout  -nc 3 -cw3 10 155 50;
+			iconTextButton
+				- style textOnly
+				-l "<" -w 10 -h 25 
+				-ann "Select This Object"
+				-command ("select -r $jbcSlaves")
+				selSlaveButton;
+			textField   -w 155 -h 25 -tx $slaveText
+				-ann "The object or control you want to be snapped"
+				slave;
+			iconTextButton
+				- style textOnly
+				-l "< Slave" -w 50 -h 25
+				-ann "Make the Selected Object the Slave"
+				-command ("string $slaveList[] =`ls -sl`;getSlaves($slaveList)")
+				slaveButton;
+		setParent ..;
+	
+ frameLayout  -label "Options" -cll 1 -cl 1 -bv 0 -bs etchedIn -pcc "checkBox -e -v 0 keySlave;checkBox -e -v 0 keySlave2;checkBox -e -v 0 posOnly;checkBox -e -v 0 rotOnly;textField -e -tx \"All Options turned OFF\" info;" -pec "textField -e -tx \"Options expanded\" info; "bookend;	
+ 	rowColumnLayout -numberOfRows 4;
+   	rowLayout -nc 2 -cw2 130 90;
+		string $keySlave = ("Key Slave at "+ ($frameStart -1));
+       			checkBox
+         			-l $keySlave
+           			-w 130 -h 25
+           			-ann "Set bookend key before animSnap"
+				-onc "jbc_keySlave();textField -e -tx (\"Key slave at \"+ (`floatField -q -v startFr`-1)+\" before snapping\") info;"
+				-ofc "jbc_keySlave();textField -e -tx (\"DONT key slave at \"+ (`floatField -q -v startFr`-1)+\" before snap\") info;"
+           			-v 0
+           			keySlave;
+					
+		string $keySlave2 = ("Key at "+ ($frameEnd+1));
+       			checkBox
+         			-l $keySlave2
+           			-w 90 -h 25
+           			-ann "Set bookend key before animSnap"
+				-onc "jbc_keySlave2(); textField -e -tx (\"Key slave at \"+ (`floatField -q -v endFr`+1)+\" before snapping\") info;"
+				-ofc "jbc_keySlave2();textField -e -tx (\"DONT key slave at \"+ (`floatField -q -v endFr`+1)+\" before snap\") info;"
+           			-v 0
+           			keySlave2;	
+		setParent ..;
+		
+		rowLayout -nc 2 -cw2 130 90;
+			checkBox
+			-l "Trans Only"
+           		-w 130 -h 25
+           		-ann "Only Snap Position"
+			-onc "checkBox -e -v 0 rotOnly;textField -e -tx \"Snap Translation Values Only ON\" info;"
+			-ofc "textField -e -tx \"Snap Translation Values Only OFF\"  info;"
+			posOnly;
+			
+			checkBox
+			-l "Rots Only"
+           		-w 90 -h 25
+           		-ann "Only Snap Roations"
+			-onc "checkBox -e -v 0 posOnly;textField -e -tx \"Snap Rotation Values Only ON\" info;"
+			-ofc "textField -e -tx \"Snap Rotation Values Only OFF\"  info;"
+			rotOnly;
+			
+		setParent ..;	
+		setParent ..;
+		setParent ..;	 
+		 	 
+	columnLayout -adjustableColumn true bottom;
+	separator -st none -h 5;
+	rowLayout -nc 2 -cw2 190 30;
+		button  
+			-h 30 -w 190 
+			-l "Snap!" -al "center"
+			-c ( "string $select[]=`ls -sl`; int $slaves=(`size $select`); string $slaveList[] =$select; doSnap (`floatField -q -v startFr`,`floatField -q -v endFr`, `textField -q -tx master`, $slaveList[0], $slaves, $slaveList)") 
+			-annotation "Snap Slave to Master over selected frame range" doSnap;
+			
+		button
+			-width 30  -height 30
+			-l " Q " -al "center"
+			-command ("global string $jbcSlaves[]; $quickSnap = 1; jbc_insertKeyframeOnCurve3(`textField -q -tx slave`,$quickSnap); for ($obj in $jbcSlaves) { animSnap2(`textField -q -tx master`, $obj, $quickSnap);}")
+			-annotation "Snap just current frame"
+			quickSnp;
+	setParent ..;
+	
+	rowLayout -nc 1 -cw1 220;		
+		textField   -ed 0 -w 220 -h 25 -tx "Hello! I tell you things"  info;
+showWindow $ASWindow;
+}
+
+global proc doSnap (int $START, int $END, string $MASTER, string $SLAVE, int $slaves, string $SLAVELIST[])
+{
+global string $jbcSlaves[];
+// Make sure Error window not there or killed
+
+string $errWindow = "AnimSnapErrors";
+	string $errCheck[] = `ls -tr "AnimSnapErrors*"`;
+if (`window -exists $errWindow` )
+		deleteUI $errWindow;
+ 
+int $frameCheck=0;
+int $masterCheck=0;
+int $slaveCheck=0;
+int $incCheck=0;
+
+textField -e -tx "" info;
+//check start & end frames
+	if ($START > $END) {print " ERROR: Start frame greater than End frame";textField -e -tx "ERROR: Start frame > End frame" info; $frameCheck=0;}
+	else if ($START <= $END){$frameCheck=1;}
+
+//check for existence of Master and Slave
+	
+	if (!`objExists $MASTER`) {print "ERROR:Master object doesnt exist\n"; $masterCheck=9;}
+	if(!`objExists $SLAVE`) {print "ERROR:Slave object doesnt exist\n";$slaveCheck=9;}
+	
+	if($MASTER=="") {print "ERROR:No Master Selected \n";$masterCheck=0;}
+	else if (($MASTER !="") && (`objExists $MASTER`)){$masterCheck=1;}
+	
+	if ((`size $jbcSlaves`)>=2) {$SLAVE = $jbcSlaves[1];}
+	if ((`size $jbcSlaves`)==1) {$SLAVE = $jbcSlaves[0];}
+	if($SLAVE=="") {print "ERROR:No Slave Selected \n";$slaveCheck=0;}
+	else if (($SLAVE !="") && (`objExists $SLAVE`) ) {$slaveCheck=1;}
+
+	if(($SLAVE==$MASTER) && (`objExists $SLAVE`) ){print "ERROR:Master and Slave are same object \n";$slaveCheck=5;}
+	if (`floatField -q -v inc` < 1 ) {print "ERROR: Negative Increment Detected \n";$incCheck=0;}	
+	else if (`floatField -q -v inc` > 0){$incCheck=1;}
+
+	
+
+//check if ALL OK
+int $allGood=($frameCheck+$masterCheck+$slaveCheck+$incCheck);
+print $allGood;
+if ($allGood!=4)
+	{
+	string $errorWindow = "AnimSnapErrors";
+	string $errorCheck[] = `ls -tr "AnimSnapErrors*"`;
+	if (`window -exists $errorWindow` )
+		deleteUI $errorWindow;
+	window -tlb on -width 200 -height 150  -title "Anim Snap Errors" $errorWindow;
+	//Check Window size.
+  		if (`windowPref -q -ex AnimSnapErrors`)
+		{
+        		if ((`windowPref -q -w AnimSnapErrors`) != 220)
+                		{windowPref -e -w 220 AnimSnapErrors;}
+        		if ((`windowPref -q -h AnimSnapErrors`) != 150)
+               	 	{windowPref -e -h 150 AnimSnapErrors;}
+		}
+	
+	string $frameChk = "PASS: Frame check OK";
+	string $masterChk = "PASS: Master Selected";
+	string $slaveChk = "PASS: Slave Selected";
+	string $incChk = "PASS: Increment OK";
+
+	if ($frameCheck !=1)     {$frameChk="ERROR: Start frame >  than End frame";}
+	if ($masterCheck ==0)    {$masterChk ="ERROR: No Master Object Selected";}
+	if ($masterCheck ==9)    {$masterChk ="ERROR: Master object doesn't exist";}
+	if ($slaveCheck   ==0)   {$slaveChk="ERROR: No Slave Object Selected";}
+  	if ($slaveCheck   ==5)   {$slaveChk="ERROR: Slave is same as Master";}
+	if ($slaveCheck   ==9)   {$slaveChk="ERROR: Slave object doesn't exist";}
+	if ($incCheck == 0)      {$incChk="ERROR: Increment Value Invalid";}
+
+	rowColumnLayout -numberOfColumns 1 -cw 1 220 ;
+		text -w 220 -al "left" -l "          ";
+		text -w 220 -al "left" -l $frameChk;
+		text -w 220 -al "left" -l $masterChk;
+		text -w 220 -al "left" -l $slaveChk;
+		text -w 220 -al "left" -l $incChk;
+		text -w 220 -al "left" -l "          ";
+		button
+			-l "OK"
+			-w 220 -h 30
+			-c ("string $errWindow = \"AnimSnapErrors\"; deleteUI $errWindow;")
+			okButton;
+	setParent ..;
+	showWindow $errorWindow;
+	textField -e -tx ("ERRORS exist in the initial set-up") info;
+	}
+//================
+// Heres the SNAP!
+//================
+else if ($allGood==4)
+	{
+	string $MASTER_ORIG=$MASTER;
+	$slaves = (`size $jbcSlaves` -1);
+	
+	for ($slaveSnaps=0;$slaveSnaps<=$slaves;$slaveSnaps++)
+		{
+		$SLAVE=$jbcSlaves[$slaveSnaps];
+		//$SLAVE=$jbcSlaves[0];
+		$MASTER=$MASTER_ORIG;	
+		int $time = `currentTime -q`;
+	
+		//PanelPreferencesWindow;
+		//panelEditor "Panels";
+			$newPL = "animSnapLayout";
+			$oldPL = "animSnapLayout2";
+			string $savedPanelLayout;
+			$savedPanelLayout = "animSnapLayout";
+		if (`checkBox -q -v keySlave`==1)
+			{	
+			jbc_insertKeyframeOnCurve(`floatField -q -v startFr`,`textField -q -tx slave`, $SLAVELIST );
+			}
+		if (`checkBox -q -v keySlave2`==1)
+			{	
+			jbc_insertKeyframeOnCurve2(`floatField -q -v endFr`,`textField -q -tx slave`, $SLAVELIST);
+			}	
+		
+		if (  ((`checkBox -q -v fastSnap`) == 1) || (( (`floatField -q -v startFr`) != (`floatField -q -v endFr`) ) && ((`checkBox -q -v fastSnap`) == 1)))
+			{
+			PanelPreferencesWindow;
+			panelEditor "Panels";
+			if (`jbcSaveCurrentPanelLayout($newPL)` == "animSnapLayout2"){$oldPL = "animSnapLayout"; $newPL="animSnapLayout2";}
+			setNamedPanelLayout "Single Perspective View"; updateToolbox(); //change panel to Dope Sheet for speed
+			string $panel = `getPanel -wf`;
+			scriptedPanel -e -rp $panel dopeSheetPanel1;
+			}
+			select -r $MASTER $SLAVE; // print `ls -sl`; print "\n";
+			string  $loc[];
+			if ((`checkBox -q -v MO`==1) && ($MASTER !=$SLAVE))
+				{
+				//create  temp locator in same location as slave
+				spaceLocator -p 0 0 0 -n tempLoc;
+				
+				$setLocFrame = `floatField -q -v startFr`;
+				currentTime -e $setLocFrame;
+				
+				//snap temp loc to slave
+				select -r  $SLAVE tempLoc;
+				$s = `ls -sl`;
+				string $loc[] = `parentConstraint  -weight 1`;
+				setKeyframe -breakdown 0 -hierarchy none -controlPoints 0 -shape 0 $s[1];
+				delete $loc[0];
+		
+				//parent temp loc to master
+				select -r  $MASTER tempLoc;
+				$s = `ls -sl`;
+				string $loc[] =   `parentConstraint  -mo -weight 1`;
+				setKeyframe -breakdown 0 -hierarchy none -controlPoints 0 -shape 0 $s[1];
+		
+				//replace master with Temp loc
+				select -r  tempLoc $SLAVE;
+ 				$MASTER_ORIG = $MASTER;
+				$MASTER = "tempLoc";
+				}
+			int $increment = `floatField -q -v inc`;
+			string $byKeyCheck = `iconTextButton -q -l incReset`;
+			//for ($i = $START; $i<=$END; $i++)
+			float $nextKey;
+			  for ($i = $START; $i<=$END; $i=$i+$increment)
+				{
+				if ($MASTER == $SLAVE){break;}
+
+				if ($byKeyCheck=="By Keyframes")
+					{$nextKey = `findKeyframe -time $i -which next $MASTER_ORIG`;}
+
+				if ($byKeyCheck=="By Increment"){currentTime -e $i;} // use incremental method
+
+				else if ($byKeyCheck=="By Keyframes")  //Short-circuit incremental method
+					{
+					if ($nextKey<$i){$i=$END;} 
+					else if (($nextKey > $i) && ($i != $START)) {$i=$nextKey;}
+					currentTime -e $i; 
+					}
+				textField -e -tx ("Snapping for frame "+$i) info;
+				animSnap2($MASTER,$SLAVE, 0);
+				}
+			clear $loc;
+		
+			if (`objExists tempLoc`){delete tempLoc;}	
+			$MASTER=$MASTER_ORIG;
+		
+		currentTime -e $time;
+		if ( ((`checkBox -q -v fastSnap`) == 1) || ( ((`floatField -q -v startFr`) != (`floatField -q -v endFr`) ) && ((`checkBox -q -v fastSnap`) == 1)))
+			{
+			if ($newPL == "animSnapLayout2"){$oldPL = "animSnapLayout";}
+			else {$oldPL= "animSnapLayout2";}
+			jbcDelNamedPanelLayout($oldPL);
+			setNamedPanelLayout $newPL;
+			deleteUI panelArrangementWin;
+			}
+		textField -e -tx ("Anim-Snapping Complete!") info;
+		}
+	if (`objExists tempLoc`){delete tempLoc;}
+	}	
+}
+
+global proc animSnap2(string $mas, string $slv, int $quickSnap)
+{
+	global string $jbcSlaves[];
+	//Check for keySlave Options
+	if ($quickSnap ==1){
+	$time = `getAttr time1.outTime`;
+		if (`checkBox -q -v keySlave`==1){
+			currentTime ( $time -1);
+			setKeyframe -breakdown 0 -hierarchy none -controlPoints 0 -shape 0 {$slv};}
+		if (`checkBox -q -v keySlave2`==1){
+			currentTime ( $time +1);
+			setKeyframe -breakdown 0 -hierarchy none -controlPoints 0 -shape 0 {$slv};}
+		currentTime ( $time);
+	}
+	
+	if ($mas!="" && $slv!="") {select -r $mas $slv;}
+	else  {textField -e - tx "Missing Master or Slave Object..." info;}
+
+	if ($quickSnap ==1) {textField -e - tx ("Quick Snapped Only -- frame "+ (`currentTime -q`)) info;}		
+		
+string $s[] =`ls -sl`;
+int $OKt=0;
+int $OKr=0;
+int $OKall=0;
+	for ($sel in $s)
+ 		{
+		int $tx = `getAttr -l ($sel+".tx")`;
+		int $ty = `getAttr -l ($sel+".ty")`;
+		int $tz = `getAttr -l ($sel+".tz")`;
+		int $rx = `getAttr -l ($sel+".rx")`;
+		int $ry = `getAttr -l ($sel+".ry")`;
+		int $rz = `getAttr -l ($sel+".rz")`;
+		$OKt = $tx+$ty+$tz;
+		$OKr = $rx+$ry+$rz;
+		$OKall=$OKt+$OKr;
+		}
+if ($mas!=$slv)
+	{	
+	if (($OKall==0) && ((`checkBox -q -v posOnly`==0) && (`checkBox -q -v rotOnly`==0)))
+		{
+		string $c[] = `parentConstraint  -weight 1`;
+		setKeyframe -breakdown 0 -hierarchy none -controlPoints 0 -shape 0 $s[1];
+		delete $c[0];
+		}
+		
+	else if (($OKt ==0) && ((`checkBox -q -v posOnly`==1) || ($OKr !=0)))
+		{
+		print "Trans only \n";
+		string $c[] = `parentConstraint  -skipRotate x -skipRotate y -skipRotate z -weight 1`;
+		setKeyframe -breakdown 0 -hierarchy none -controlPoints 0 -shape 0 $s[1];
+		delete $c[0];
+		}
+		
+	else if (($OKr ==0) && ((`checkBox -q -v rotOnly`==1) || ($OKt !=0)))
+		{
+		print "Rots only \n";
+		string $c[] = `parentConstraint  -skipTranslate x -skipTranslate y -skipTranslate z -weight 1`;
+		setKeyframe -breakdown 0 -hierarchy none -controlPoints 0 -shape 0 $s[1];
+		delete $c[0];
+		}
+		
+	else{textField -e - tx "Something is broken! - no snap happened" info;}
+	
+	
+	$quickSnap=0;
+	}
+if ($mas==$slv)	{print "Cant snap Master to itself...skipping";}
+}
+
+global proc string jbcSaveCurrentPanelLayout(string $newPL) {
+
+	global string $gMainWindow;
+	global string $gMainPane;
+	global string $gPanelEditorWnd;
+	//string $text = "animSnapLayout";
+	string $layoutName = $newPL; // print ("save default = "+$layoutName+"\n");
+	string $config, $configArray[];
+
+		//	First check if the name is unique.
+		//
+		$configArray = `getPanel -allConfigs`;
+		for ($config in $configArray) {
+			if ($layoutName == `panelConfiguration -query -label $config`) 
+			{
+				$layoutName = "animSnapLayout2"; //print ("save new = "+$layoutName+"\n");
+				$newPL = "animSnapLayout2";
+			}
+		}
+		string $newConfigName = `panelConfiguration -sc false`;
+		panelConfiguration -edit -label $layoutName $newConfigName;
+		panelConfiguration -edit -label $layoutName $newConfigName;
+		updatePanelLayoutFromCurrent $layoutName;
+
+		//  special case for top,front,side,persp
+		//	    -make sure they always reset their state.
+		//
+		int    $i,$nArr;
+		string $labels[];
+	
+		$labels = `panelConfiguration -q -labelStrings $newConfigName`;
+		
+		$nArr = size($labels);
+		for ($i = 0; $i < $nArr; $i++) {
+			if ("Persp View" == $labels[$i] ||
+				"Top View" == $labels[$i] ||
+				"Side View" == $labels[$i] ||
+				"Front View" == $labels[$i])
+			{
+				panelConfiguration -e -rfs ($i+1) true $newConfigName;
+			}
+		}
+	return $newPL;
+}
+
+global proc jbcDelNamedPanelLayout(string $DELETEME) {
+
+	global string $gPanelEditorWnd;
+	setParent $gPanelEditorWnd;
+	string $tsl = "PanelEditorLayoutsScrollList";
+	string $tfg = "PanelEditorLayoutsTextFieldGrp";
+	int    $selected[];
+	string $oldLabel;
+	string $configName;
+	string $listItems[];
+	string $msg;
+	if (`textScrollList -query -numberOfItems $tsl` > 0) {
+		$oldLabel = $DELETEME;// print ("old label = "+$oldLabel+"\n");
+		$selected = `textScrollList -query -selectIndexedItem $tsl`;
+
+		if ("Current Layout" == $oldLabel) {
+			confirmDialog -title "Alert" 
+				-button "OK"
+				-defaultButton "OK"
+				-message "       Cannot delete 'Current Layout'.        "
+				-parent $gPanelEditorWnd;
+		} else {
+			if (`optionVar -query newScenePanelConfiguration` == $oldLabel) {
+				confirmDialog -title "Alert" 
+					-button "OK"
+					-defaultButton "OK"
+					-message ("       You cannot delete \""+$oldLabel +"\" while it       \n" +
+							  "       is selected as the New Scene Configuration preference.        \n"+
+							  "     You can change the preference in the UI Preferences dialog.       ")
+					-parent $gPanelEditorWnd;
+			} else {
+					textScrollList -edit -removeIndexedItem $selected[0] $tsl;
+
+					$configName = `getPanel -cwl $oldLabel`;
+					deleteUI -panelConfig $configName;
+
+					if ($selected[0] > `textScrollList -query -numberOfItems $tsl`) {
+						$selected[0] = $selected[0] - 1;
+					}
+					if ($selected[0] > 0) {
+						textScrollList -edit -selectIndexedItem $selected[0] $tsl;
+					}
+					panelEd_LayoutSelectionChanged;
+			}
+		}
+	}
+}
+
+global proc jbc_insertKeyframeOnCurve( float $STARTFRAME,string $SLAVE, string $SLVLIST[]) 
+{
+	global string $jbcSlaves[];
+	select -clear;
+	$SLAVE = `textField -q -tx slave`;
+	if (`objExists $SLAVE`)
+	{  
+		select -r $SLAVE;
+		$time = `getAttr time1.outTime` ;currentTime ( $time );
+		setKeyframe -breakdown 0 -hierarchy none -controlPoints 0 -shape 0 {$SLAVE};
+		string $curves[] = `keyframe -q -name`;
+		if (`checkBox -q -v keySlave`==1)
+			{ 	
+			float $time = ($STARTFRAME -1); 
+			for($x=0; $x <size($curves); $x++) {
+			setKeyframe -insert -time $time $curves[$x];}
+			}  
+	}		  
+	else if (!`objExists $SLAVE`)	  // i.e. when the textField shows a "multiple slave" condition
+	{  
+		int $slaves = `size $jbcSlaves`;
+		if ($slaves > 0)
+		{
+			for ($y=1;$y<=$slaves ;$y++)
+			{
+			$SLAVE = $jbcSlaves[($y-1)];
+			if ($SLAVE != (`textField -q -tx master`))
+				{
+					select -r $SLAVE;
+					$time = `getAttr time1.outTime` ;currentTime ( $time );
+					setKeyframe -breakdown 0 -hierarchy none -controlPoints 0 -shape 0 {$SLAVE};
+    					string $curves[] = `keyframe -q -name`;
+    					if (`checkBox -q -v keySlave`==1)
+    						{
+    						float $time = ($STARTFRAME -1); 
+    						for($x=0; $x <size($curves); $x++) {
+        					setKeyframe -insert -time $time $curves[$x];}
+						} 
+				} 
+			}
+		}	
+	}
+}
+
+global proc jbc_insertKeyframeOnCurve2( float $ENDFRAME,string $SLAVE, string $SLVLIST[] ) 
+{
+	global string $jbcSlaves[];
+    	select -clear;
+    	$SLAVE = `textField -q -tx slave`;
+ 	if (`objExists $SLAVE`)
+	{  
+		select -r $SLAVE;
+		$time = `getAttr time1.outTime` ;currentTime ( $time );
+		setKeyframe -breakdown 0 -hierarchy none -controlPoints 0 -shape 0 {$SLAVE};
+    		string $curves[] = `keyframe -q -name`;
+    		if (`checkBox -q -v keySlave2`==1)
+    			{
+    			float $time = ($ENDFRAME +1); 
+    			for($x=0; $x <size($curves); $x++) {
+        		setKeyframe -insert -time $time $curves[$x];}
+			}  
+	}		  
+	else if (!`objExists $SLAVE`)	  // i.e. when the textField shows a "multiple slave" condition
+	{  
+		int $slaves = `size $jbcSlaves`;
+		if ($slaves > 0)
+		{
+			for ($y=1;$y<=$slaves ;$y++)
+			{
+			$SLAVE = $jbcSlaves[($y-1)];
+			if ($SLAVE != (`textField -q -tx master`))
+				{
+					select -r $SLAVE;
+					$time = `getAttr time1.outTime` ;currentTime ( $time );
+					setKeyframe -breakdown 0 -hierarchy none -controlPoints 0 -shape 0 {$SLAVE};
+    					string $curves[] = `keyframe -q -name`;
+    					if (`checkBox -q -v keySlave2`==1)
+    						{
+    						float $time = ($ENDFRAME +1); 
+    						for($x=0; $x <size($curves); $x++) {
+        					setKeyframe -insert -time $time $curves[$x];}
+						} 
+				} 
+			}
+		}	
+	}
+}
+global proc jbc_insertKeyframeOnCurve3(string $SLAVE,int $quickSnap) 
+{
+	global string $jbcSlaves[];
+	select -clear;
+	for ($obj in $jbcSlaves)
+	{
+		select -r $obj;
+		string $curves[] = `keyframe -q -name`;
+			if ((`checkBox -q -v keySlave`==1) && ($quickSnap==1))
+				{
+				float $time = (`currentTime -q` -1); 
+				for($x=0; $x <size($curves); $x++) {setKeyframe -insert -time $time $curves[$x];} 
+				}
+			if ((`checkBox -q -v keySlave`==1) && ($quickSnap==1))		
+				{
+				float $time = (`currentTime -q` +1); 
+				for($x=0; $x <size($curves); $x++) {setKeyframe -insert -time $time $curves[$x];
+				}    
+				}
+				$quickSnap=0;
+		}
+}
+
+global proc jbc_keySlave () 
+	{
+	float $keyStart = ((`floatField -q -v startFr`)-1);
+	string $label  = ("Key Slave at "+ $keyStart);
+	checkBox -e -l ($label) -e -h 25 keySlave;
+	}
+	
+global proc jbc_keySlave2 () 
+	{
+	float $keyEnd = ((`floatField -q -v endFr`)+1);
+	string $label  = ("Key at "+ $keyEnd);
+	checkBox -e -l ($label) -e -h 25 keySlave2;
+	}	
+	
+
+
+global proc getSlaves (string $slaveList[])
+	{
+		global string $jbcSlaves[];
+		string $slave;
+		string $select[] = `ls -sl`; 
+		int $numObj = (`size $select`);
+		string $masCheck = `textField -q -tx master`;
+		if (`size $select`==1) 
+			{
+			$slave = $select[0];
+			textField -e -tx $slave slave;
+			clear $jbcSlaves;
+			$jbcSlaves = $select;
+			slave2Master();
+			} 
+		if ((`size $select` == 2) && (($masCheck==$select[0]) || ($masCheck==$select[1])))
+			{
+			if ($masCheck==$select[0]){$slave = $select[1];}
+			if ($masCheck==$select[1]){$slave = $select[0];}
+			textField -e -tx $slave slave;
+			clear $jbcSlaves;
+			$jbcSlaves[0] = $slave;
+			slave2Master();
+			}  
+		if ((`size $select` == 2) && (($masCheck!=$select[0]) && ($masCheck!=$select[1])))
+			{
+			clear $jbcSlaves;
+			$jbcSlaves = $select;
+			removeMaster();
+			$slave = $jbcSlaves[0];
+			$numObj=`size $jbcSlaves`;
+			$multObj = ("> "+ $numObj+ " Objects selected <");
+			textField -e -tx $multObj slave;
+			slave2Master();
+			}  
+		if (`size $select` >= 3)
+			{
+			clear $jbcSlaves;
+			$jbcSlaves = $select;
+			removeMaster();
+			$slave = $jbcSlaves[0]; 
+			$numObj=`size $jbcSlaves`;
+			$multObj = ("> "+ $numObj+ " Objects selected <");
+			textField -e -tx $multObj slave;
+			slave2Master();
+			}
+	}
+	
+global proc removeMaster()
+{
+	global string $jbcSlaves[];
+	string $sel[]=`ls -sl`;
+	string $master[];
+	$master[0]=`textField -q -tx master`;
+	//clear $jbcSlaves;
+	//$jbcSlaves = stringArrayRemove($master, $sel);
+	$jbcSlaves = stringArrayRemove($master, $jbcSlaves);
+}	
+
+global proc slave2Master()
+{
+	global string $jbcSlaves[];
+	string $master[];
+	$master[0]=`textField -q -tx master`;
+	$master = stringArrayRemove($jbcSlaves,$master);
+	textField -e -tx $master[0] master;
+}
+
+global proc pickMaster()
+{
+	global string $jbcSlaves[];
+	string $select[] = `ls -sl`;
+	string $master =  $select[0];  
+	textField -e -tx $master master;
+	removeMaster();
+	$numObj=`size $jbcSlaves`; 
+	if (`size $jbcSlaves` ==0){textField -e -tx "" slave;}
+	if (`size $jbcSlaves` ==1){textField -e -tx $jbcSlaves slave;}
+	if (`size $jbcSlaves` >=2){$multObj = ("> "+ $numObj+ " Objects selected <");textField -e -tx $multObj slave;}
+}
+
+global proc ToggleInc()
+{
+	string $incButt = `iconTextButton -q -l incReset`;
+	if ($incButt=="By Increment")
+		{
+		iconTextButton -e -l "By Keyframes" incReset;
+		iconTextButton -e -l " " incLess;
+		floatField -ed 0 -e -v 1 -e -w 1 inc;
+		iconTextButton -e -l " " incMore;
+		}
+	else if ($incButt=="By Keyframes")
+		{
+		iconTextButton -e -l "By Increment" incReset;
+		iconTextButton -e -l "<<" incLess;
+		floatField -ed 1 -e -v 1 -e -w 50 inc;
+		iconTextButton -e -l ">>" incMore;
+		}
+}
+
+
+global proc swap()
+{
+global string $jbcSlaves[];
+string $M = `textField -q -tx master`;
+//string $S = `textField -q -tx slave`;
+
+//string $M = $jbcSlaves[0];
+string $S = $jbcSlaves[0];
+
+textField -e -tx $M slave;
+textField -e -tx $S master;
+clear $jbcSlaves;
+$jbcSlaves[0]=$M;
+}
+
+global proc jbc_aboutAnimSnap()
+	{
+	string $aasWindow = "AboutAnimSnap";
+	string $aasCheck[] = `ls -tr "AboutAnimSnap*"`;
+	if (`window -exists $aasWindow` )
+		deleteUI $aasWindow;
+		
+	window -tlb on -width 160 -height 130  -title "About" $aasWindow;
+	//Check Window size.
+  		if (`windowPref -q -ex AboutAnimSnap`)
+		{
+        		if ((`windowPref -q -w AboutAnimSnap`) != 160)
+                		{windowPref -e -w 160 AboutAnimSnap;}
+        		if ((`windowPref -q -h AboutAnimSnap`) != 150)
+               	 	{windowPref -e -h 150 AboutAnimSnap;}
+		}
+	
+	rowColumnLayout -numberOfColumns 1 -cw 1 160 ;
+		text -w 160 -al "center" -l "          ";
+		text -w 160 -al "center" -l "Anim Snap";
+		text -w 160 -al "center" -l "Written by Jeff Croke";
+		text -w 160 -al "center" -l "jbcroke@jbcroke.com";
+		text -w 160 -al "center" -l "Copyright 2008";
+		text -w 160 -al "center" -l "          ";
+		button
+			-l "OK"
+			-w 160 -h 30
+			-c ("string $aasWindow = \"AboutAnimSnap\"; deleteUI $aasWindow;")
+			okButton;
+	setParent ..;
+	showWindow $aasWindow;
+	}
+
+global proc jbc_useAnimSnap()
+	{
+	string $aasWindow = "HowTo";
+	string $aasCheck[] = `ls -tr "HowTo*"`;
+	if (`window -exists $aasWindow` )
+		deleteUI $aasWindow;
+		
+	window -tlb on -width 400 -height 230  -title "Anim Snap - How to" $aasWindow;
+	//Check Window size.
+  		if (`windowPref -q -ex HowTo`)
+		{
+        		if ((`windowPref -q -w HowTo`) != 400)
+                		{windowPref -e -w 400 HowTo;}
+        		if ((`windowPref -q -h HowTo`) != 230)
+               	 	{windowPref -e -h 230 HowTo;}
+		}
+	
+	rowColumnLayout -numberOfColumns 1 -cw 1 400 ;
+		text -w 400 -al "center" -font "boldLabelFont" -l "<:>:>:>:>:>      How To Use Anim Snap      <:<:<:<:<:>";
+		text -w 400 -al "left" -l "========================================================";
+		text -w 400 -al "left" -l "1. Choose a single 'Master' object as a target object for the snapping.";
+		text -w 400 -al "left" -l "2. Choose a 'Slave' (or several) objects that you want to match";
+		text -w 400 -al "left" -l "    or mimic the master object's trans and rots.";
+		text -w 400 -al "left" -l "3. Choose the frame range over which the snap will happen.";
+		text -w 400 -al "left" -l "4. Press the 'Snap' Button to initiate snap process over frame range";
+		text -w 400 -al "left" -l "========================================================";
+		text -w 400 -al "left" -l "The 'Q' button only snaps objects on the current frame";
+		text -w 400 -al "left" -l "Additional options self explanitory (I hope!)";
+		text -w 400 -al "left" -l "   ";
+		button
+			-l "OK"
+			-w 400 -h 30
+			-c ("string $aasWindow = \"HowTo\"; deleteUI $aasWindow;")
+			okButton;
+	setParent ..;
+	showWindow $aasWindow;
+	}	
+	
+global proc jbc_whatIsIt()
+	{
+	string $aasWindow = "whatIs";
+	string $aasCheck[] = `ls -tr "whatIs*"`;
+	if (`window -exists $aasWindow` )
+		deleteUI $aasWindow;
+		
+	window -tlb on -width 400 -height 230  -title "Anim Snap - What is it ?" $aasWindow;
+	//Check Window size.
+  		if (`windowPref -q -ex whatIs`)
+		{
+        		if ((`windowPref -q -w whatIs`) != 400)
+                		{windowPref -e -w 400 whatIs;}
+        		if ((`windowPref -q -h whatIs`) != 230)
+               	 	{windowPref -e -h 230 whatIs;}
+		}
+	rowColumnLayout -numberOfColumns 1 -cw 1 400 ;
+		text -w 400 -al "center" -font "boldLabelFont" -l "<:>:>:>:>:>      What Anim Snap Does      <:<:<:<:<:>";
+		text -w 400 -al "left" -l "========================================================";
+		text -w 400 -al "left" -l "Anim Snap is a script that will snap the trans & rots of one object to";
+		text -w 400 -al "left" -l "another over a frame range (or on a single frame.) It leaves the 'slave'";
+		text -w 400 -al "left" -l "object independent of the 'master' and avoids the need to set up a";
+		text -w 400 -al "left" -l "parent relationship or a complicated constraint system for simple";
+		text -w 400 -al "left" -l "actions or actions that only cover a shorter frame range within the shot.";
+		text -w 400 -al "left" -l "========================================================";
+		text -w 400 -al "left" -l "e.g. A character steps on sticky fly paper. The paper can be 'snapped'";
+		text -w 400 -al "left" -l "to the characters foot from the point of contact onward...and then";
+		text -w 400 -al "left" -l "perhaps fall off a little later - all without you bothering with constraints.";
+		button
+			-l "OK"
+			-w 400 -h 30
+			-c ("string $aasWindow = \"whatIs\"; deleteUI $aasWindow;")
+			okButton;
+	setParent ..;
+	showWindow $aasWindow;
+	}			
